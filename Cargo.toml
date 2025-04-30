@@ -1,0 +1,11 @@
+[package]
+name = "libstory"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+squeel = { path = "./crates/squeel" }
+anyhow = "1.0.98"
+miette = { version = "7.5.0", features = ["serde", "fancy"] }
+sqlx = { version = "0.8.5", features = ["runtime-tokio-native-tls", "sqlite"] }
+tokio = { version = "1.44.2", features = ["macros", "rt-multi-thread"] }
