@@ -158,12 +158,13 @@ fn type_to_sql(ty: &Type) -> String {
         _ => {}
     }
 
-    Default::default()
+    "TEXT".to_string()
 }
 
 struct Parameter {
     ty: Type,
     ident: Ident,
+    ignore: bool,
     optional: bool,
     name: Option<Ident>,
     rename: Option<Rename>,
@@ -236,6 +237,7 @@ struct ColumnAttributes {
     rename: Option<Rename>, 
     primary: bool,
     unique: bool,
+    ignore: bool,
     foreign: Option<(Ident, Ident)>,
 }
 
@@ -246,11 +248,14 @@ impl Parse for ColumnAttributes {
         let items = input.parse_terminated(FlagOrAssign::parse, Token![,])?;
         for item in items {
             match item {
-                FlagOrAssign::Flag(name) => match name.to_string().as_str() {
-                    "primary" => attrs.primary = true,
-                    "unique" => attrs.unique = true,
-                    _ => {}
-                }
+                FlagOrAssign::Flag(name) => {
+                    match name.to_string().as_str() {
+                        "primary" => attrs.primary = true,
+                        "unique" => attrs.unique = true,
+                        "ignore" => attrs.ignore = true,
+                        _ => {}
+                    }
+                },
                 FlagOrAssign::Assign(name, value) => match name.to_string().as_str() {
                     "rename" => if let Expr::Lit(ExprLit { lit: Lit::Str(lit), .. }) = value {
                         match Rename::from_str(&lit.value()) {
@@ -300,6 +305,7 @@ impl AddAssign for ColumnAttributes {
         self.name = rhs.name.or(self.name.clone());
         self.rename = rhs.rename.or(self.rename);
         self.foreign = rhs.foreign.or(self.foreign.clone());
+        self.ignore = self.ignore || rhs.ignore;
     }
 }
 
@@ -415,6 +421,7 @@ fn parse_parameters(derive: &DeriveInput, attrs: &TableAttributes) -> Vec<Parame
                 let ty = f.ty.clone();
                 Parameter {
                     optional: optional(&ty),
+                    ignore: attrs.ignore,
                     name: attrs.name,
                     rename: attrs.rename,
                     primary: attrs.primary,
@@ -448,6 +455,7 @@ pub fn table_derive(input: TokenStream) -> TokenStream {
     let mut from_row_arg_build = Vec::new();
     let mut from_row_types = Vec::new();
 
+    let mut ignored = Vec::new();
     let mut unique = Vec::new();
     let mut foreign = Vec::new();
     let mut create_format_args = Vec::new();
@@ -476,6 +484,11 @@ pub fn table_derive(input: TokenStream) -> TokenStream {
         let ty = param.ty.clone();
         let name_ident = param.ident.clone();
         let name = param.sql_name().to_string();
+
+        if param.ignore {
+            ignored.push(name_ident);
+            continue;
+        }
 
         if !param.primary {
             let idx = LitInt::new(&insert_fmt.len().to_string(), Span::call_site());
@@ -645,7 +658,10 @@ pub fn table_derive(input: TokenStream) -> TokenStream {
         {
             fn from_row(__row: &'a R) -> ::sqlx::Result<Self> {
                 #(#from_row_arg_build)*
-                ::std::result::Result::Ok(#struct_name { #(#from_row_arg_names)* })
+                ::std::result::Result::Ok(#struct_name {
+                    #(#from_row_arg_names)*
+                    #(#ignored: Default::default(),)*
+                })
             }
         }
     }.into()

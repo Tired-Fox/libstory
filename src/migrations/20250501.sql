@@ -1,0 +1,16 @@
+CREATE TABLE IF NOT EXISTS Manga (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    volumes INTEGER NOT NULL,
+    UNIQUE(name)
+);
+
+CREATE TABLE IF NOT EXISTS Volume (
+    id INTEGER PRIMARY KEY,
+    manga_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    part INTEGER,
+    read_state TEXT,
+    UNIQUE(name),
+    FOREIGN KEY (manga_id) REFERENCES Manga(id)
+);

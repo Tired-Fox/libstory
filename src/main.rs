@@ -17,18 +17,30 @@ struct Volume {
     pub manga_id: u32,
     #[column(unique)]
     pub name: String,
+    pub read_state: ReadState,
     pub part: Option<u32>,
+}
+
+#[derive(sqlx::Type, Default, Debug)]
+enum ReadState {
+    #[default]
+    Unread,
+    Reading,
+    Complete,
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let conn = Connection::builder()
-        .filename("data.sqlite")
+        .filename("manga.sqlite")
         .create_if_missing(true)
-        //.migrations("src/migrations")
-        //.await?
+        .migrations("src/migrations")
+        .await?
         .build()
         .await?;
+
+    _ = sqlx::query("")
+        .bind(ReadState::Unread);
 
     conn.create_table::<Manga>().await?;
     conn.create_table::<Volume>().await?;
@@ -42,12 +54,12 @@ async fn main() -> anyhow::Result<()> {
     println!("[{id}] {manga:#?}");
 
 
-    let (volume_id, manga_id)= match conn.one::<Volume>((None, Some(id), Some("1".into()), None)).await {
+    let (volume_id, manga_id)= match conn.one::<Volume>((None, Some(id), Some("1".into()), None, None)).await {
         Ok(volume) => (volume.id, volume.manga_id),
-        Err(_) => conn.insert::<Volume>((id, "1".into(), None)).await?,
+        Err(_) => conn.insert::<Volume>((id, "1".into(), Default::default(), None)).await?,
     };
 
-    let volumes = conn.many::<Volume>((None, Some(id), None, None)).await?;
+    let volumes = conn.many::<Volume>((None, Some(id), None, None, None)).await?;
     println!("[{manga_id}:{volume_id}] {volumes:#?}");
 
     Ok(())
